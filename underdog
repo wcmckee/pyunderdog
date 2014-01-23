@@ -1,0 +1,40 @@
+#!/bin/bash
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+host=$HOSTNAME
+
+now=$(date +%D-%H:%M)
+# users=$(ps h -C x-session-manager -o user:16; ps h -C gnome-session -o user:16 | sort -u | grep -vE "root|Debian-gdm"); users=$(echo $users)
+users=$(w -h | cut -f1 -d\ | grep -vE "root"); users=$(echo $users)
+
+sleep $[ $RANDOM % 10 ]
+
+[ -f /home/meta/after-school ] || exit 0
+
+for user in $users; do
+	[ $user == "public" ] && user="public-${host}"
+
+	ttd=0 ;
+	if grep "^$user " /home/meta/time-limit; then
+		limit=$(grep "^$user " /home/meta/time-limit | cut -f2 -d" ")
+	else
+		limit=$(tail -1 /home/meta/time-limit)
+	fi
+
+	[ -f /home/meta/${user}.ttd ] && read ttd limit < /home/meta/${user}.ttd
+	warn=$[ $limit - 5 ]
+	ttd=$[ $ttd + 1 ]
+	echo "user $user"
+	echo $ttd $limit > /home/meta/${user}.ttd
+	echo "ttd $ttd limit $limit warn $warn"
+
+	if [ $ttd -eq $warn -a ! -f /home/meta/nokick ]; then
+		zenity --error --title="notification" --text "$user has had $ttd minutes today, limit is $limit" --display :0 &
+	fi
+
+	if [ $ttd -ge $limit -a ! -f /home/meta/nokick ]; then
+		zenity --error --title="Bye" --text "$user has had $ttd minutes today. Let someone else have a turn" --display :0 &
+		sleep 30; /etc/init.d/gdm3 restart ; killall -9 -u $user
+	fi
+
+done
